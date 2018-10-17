@@ -15,7 +15,7 @@ Resources:
     Properties:
       Handler: rating-bot.lambda_handler
       Description: Function to fulfill the session rating Lex bot intents (CodeStar)
-      Runtime: python2.7
+      Runtime: python3.6
       Role: !GetAtt RatingBotIAMRole.Arn
       Tracing: Active
       Environment:
@@ -38,7 +38,7 @@ Resources:
               - 
                 Effect: "Allow"
                 Action: "kinesis:PutRecord"
-                Resource: "arn:aws:kinesis:us-east-1:554625704737:stream/ElasticsearchStream"
+                Resource: !GetAtt KinesisStream.Arn
         -
           PolicyName: "XRayTracingPolicy"
           PolicyDocument:
@@ -54,7 +54,7 @@ Resources:
           PolicyName: "ComprehendAccessPolicy"
           PolicyDocument:
             Version: "2012-10-17"
-            Statement: 
+            Statement:
               - 
                 Effect: "Allow"
                 Action: "comprehend:DetectSentiment"
@@ -65,7 +65,7 @@ Resources:
           -
             Sid: "AllowLambdaServiceToAssumeRole"
             Effect: "Allow"
-            Action: 
+            Action:
               - "sts:AssumeRole"
             Principal:
               Service: 
@@ -109,16 +109,11 @@ Resources:
 
   KinesisStream:
     Type: "AWS::Kinesis::Stream"
-    Properties: 
-      Name: "ElasticsearchStream"
+    Properties:
       RetentionPeriodHours: 24
       ShardCount: 1
 
   FirehoseDeliveryStream:
-    DependsOn:
-      - KinesisStream
-      - KinesisStreamAccessPolicy
-      - FirehoseDeliveryPolicy
     Type: AWS::KinesisFirehose::DeliveryStream
     Properties: 
       DeliveryStreamType: KinesisStreamAsSource
@@ -126,7 +121,7 @@ Resources:
         KinesisStreamARN: !GetAtt KinesisStream.Arn
         RoleARN: !GetAtt FirehoseDeliveryRole.Arn
       ElasticsearchDestinationConfiguration: 
-        BufferingHints: 
+        BufferingHints:
           IntervalInSeconds: 60
           SizeInMBs: 50
         CloudWatchLoggingOptions: 
@@ -204,15 +199,8 @@ Resources:
               - 's3:ListBucketMultipartUploads'
               - 's3:PutObject'
             Resource:
-              - !Join 
-                - ''
-                - - 'arn:aws:s3:::'
-                  - !Ref FirehoseDeliveryS3bucket
-              - !Join 
-                - ''
-                - - 'arn:aws:s3:::'
-                  - !Ref FirehoseDeliveryS3bucket
-                  - '*'
+              - !Sub "arn:aws:s3::${FirehoseDeliveryS3bucket}"
+              - !Sub "arn:aws:s3::${FirehoseDeliveryS3bucket}/*"
           - Effect: Allow
             Action:
               - "es:DescribeElasticsearchDomain"
@@ -221,22 +209,8 @@ Resources:
               - "es:ESHttpPost"
               - "es:ESHttpPut"
             Resource:
-              - !Join
-                - ''
-                - - 'arn:aws:es:'
-                  - !Ref "AWS::Region"
-                  - ':'
-                  - !Ref "AWS::AccountId"
-                  - ':'
-                  - "domain/rating-bot-es"
-              - !Join
-                - ''
-                - - 'arn:aws:es:'
-                  - !Ref "AWS::Region"
-                  - ':'
-                  - !Ref "AWS::AccountId"
-                  - ':'
-                  - "domain/rating-bot-es/*"
+              - !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/rating-bot-es"
+              - !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/rating-bot-es/*"
       Roles:
         - !Ref FirehoseDeliveryRole
 
@@ -244,7 +218,7 @@ Resources:
     Type: "AWS::Elasticsearch::Domain"
     Properties:
       DomainName: "rating-bot-es"
-      ElasticsearchVersion: "5.5"
+      ElasticsearchVersion: "6.3"
       ElasticsearchClusterConfig: 
         DedicatedMasterEnabled: "false"
         InstanceCount: "2"
